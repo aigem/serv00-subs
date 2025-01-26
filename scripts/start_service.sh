@@ -18,7 +18,6 @@ fi
 LOG_DIR=${LOG_DIR:-"/var/log/ytdlp"}
 API_HOST=${API_HOST:-"0.0.0.0"}
 API_PORT=${API_PORT:-5000}
-API_WORKERS=${API_WORKERS:-4}
 
 # 确保日志目录存在
 mkdir -p "$LOG_DIR"
@@ -27,11 +26,11 @@ mkdir -p "$LOG_DIR"
 source "$PROJECT_DIR/venv/bin/activate"
 
 # 设置环境变量
-export PRODUCTION=true
+export FLASK_ENV=production
 
 # 启动服务（使用配置的 API 参数）
 cd "$PROJECT_DIR"
-echo "$(date): 启动服务 - HOST=$API_HOST PORT=$API_PORT WORKERS=$API_WORKERS" >> "$LOG_DIR/service.log"
+echo "$(date): 启动服务 - HOST=$API_HOST PORT=$API_PORT" >> "$LOG_DIR/service.log"
 python -m src.run >> "$LOG_DIR/service.log" 2>&1
 
 # 添加在服务启动后

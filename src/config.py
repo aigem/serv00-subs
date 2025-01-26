@@ -17,7 +17,6 @@ class Config:
         # API配置
         self.API_HOST = os.getenv("API_HOST", "0.0.0.0")
         self.API_PORT = int(os.getenv("API_PORT", 5000))
-        self.API_WORKERS = int(os.getenv("API_WORKERS", 4))
         
         # 性能配置
         cpu_count = multiprocessing.cpu_count()
