@@ -23,8 +23,12 @@
 
 1. **克隆仓库**
 ```bash
-git clone <repository-url>
-cd ytdlp-serv00-subs
+cd /home/<你的用户名>/domains/<你的网站域名>
+cd /home/gepi/domains/ytdlp.ydns.eu
+
+git clone https://github.com/aigem/serv00-subs.git public_python
+# 复制serv00-subs/下所有文件夹及文件到 /home/gepi/domains/ytdlp.ydns.eu
+cp -r serv00-subs/ /home/gepi/domains/ytdlp.ydns.eu/public_python
 ```
 
 2. **创建虚拟环境**
