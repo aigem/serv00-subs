@@ -106,19 +106,25 @@ class SubtitleProcessor:
                     info = ydl.extract_info(url, download=True)
                     video_id = info['id']
                     
-                    # 检查普通字幕文件
-                    sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.ttml"
-                    if sub_path.exists():
-                        logger.info(f"找到普通字幕: {sub_path}")
-                        content = sub_path.read_text(encoding='utf-8')
-                        return {
-                            'status': 'success',
-                            'url': url,
-                            'video_id': video_id,
-                            'path': str(sub_path),
-                            'content': content,
-                            'type': 'normal'
-                        }
+                    # 检查普通字幕文件（检查所有可能的文件名模式）
+                    possible_paths = [
+                        config.SUBTITLE_DIR / f"{video_id}.{lang}.ttml",  # 普通字幕
+                        config.SUBTITLE_DIR / f"{video_id}.en.ttml"  # 默认英文字幕
+                    ]
+                    
+                    for sub_path in possible_paths:
+                        if sub_path.exists():
+                            logger.info(f"找到普通字幕: {sub_path}")
+                            content = sub_path.read_text(encoding='utf-8')
+                            return {
+                                'status': 'success',
+                                'url': url,
+                                'video_id': video_id,
+                                'path': str(sub_path),
+                                'content': content,
+                                'type': 'normal'
+                            }
+                            
                 except Exception as e:
                     logger.info(f"未找到普通字幕，尝试自动生成字幕: {str(e)}")
             
@@ -137,21 +143,29 @@ class SubtitleProcessor:
                     info = ydl.extract_info(url, download=True)
                     video_id = info['id']
                     
-                    # 检查自动生成的字幕文件
-                    auto_sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.auto.ttml"
-                    if auto_sub_path.exists():
-                        logger.info(f"找到自动生成字幕: {auto_sub_path}")
-                        content = auto_sub_path.read_text(encoding='utf-8')
-                        return {
-                            'status': 'success',
-                            'url': url,
-                            'video_id': video_id,
-                            'path': str(auto_sub_path),
-                            'content': content,
-                            'type': 'auto'
-                        }
+                    # 检查自动生成的字幕文件（检查所有可能的文件名模式）
+                    possible_auto_paths = [
+                        config.SUBTITLE_DIR / f"{video_id}.{lang}.ttml",  # 自动字幕
+                        config.SUBTITLE_DIR / f"{video_id}.en.ttml",  # 默认英文自动字幕
+                        config.SUBTITLE_DIR / f"{video_id}.{lang}.auto.ttml"  # 带auto标记的自动字幕
+                    ]
                     
-                    raise FileNotFoundError("未找到任何字幕文件")
+                    for auto_sub_path in possible_auto_paths:
+                        if auto_sub_path.exists():
+                            logger.info(f"找到自动生成字幕: {auto_sub_path}")
+                            content = auto_sub_path.read_text(encoding='utf-8')
+                            return {
+                                'status': 'success',
+                                'url': url,
+                                'video_id': video_id,
+                                'path': str(auto_sub_path),
+                                'content': content,
+                                'type': 'auto'
+                            }
+                    
+                    # 如果执行到这里，说明文件确实不存在
+                    logger.error("字幕文件下载成功但未找到文件")
+                    raise FileNotFoundError("字幕文件下载成功但未找到文件")
                     
                 except yt_dlp.utils.DownloadError as e:
                     self.update_error_stats('download_errors')
@@ -294,30 +308,6 @@ class SubtitleProcessor:
             logger.error(f"JSON 转换失败: {e}")
             raise RuntimeError(f"JSON 转换失败: {str(e)}")
 
-    def _convert_to_srt(self, input_path: Path) -> Path:
-        """将 TTML 转换为 SRT 格式"""
-        output_path = config.TEMP_DIR / f"{input_path.stem}.srt"
-        try:
-            # 读取 TTML 文件
-            with open(input_path, 'r', encoding='utf-8') as f:
-                ttml_content = f.read()
-            
-            # 使用 pycaption 转换
-            reader = TTMLReader()
-            writer = SRTWriter()
-            
-            captions = reader.read(ttml_content)
-            srt_content = writer.write(captions)
-            
-            # 写入 SRT 文件
-            with output_path.open('w', encoding='utf-8') as f:
-                f.write(srt_content)
-            
-            return output_path
-        except Exception as e:
-            logger.error(f"SRT 转换失败: {e}")
-            raise RuntimeError(f"SRT 转换失败: {str(e)}")
-
     def _upload_to_cdn(self, content: str, video_id: str) -> str:
         """CDN上传实现"""
         # TODO: 实现实际的CDN上传逻辑
@@ -368,7 +358,7 @@ class SubtitleProcessor:
         Args:
             url: YouTube URL
             lang: 字幕语言代码
-            convert_to: 转换格式，可选值：txt, json, srt, None（默认不转换）
+            convert_to: 转换格式，可选值：txt, json, None（默认不转换）
         """
         try:
             # 1. 检查缓存
@@ -382,7 +372,7 @@ class SubtitleProcessor:
                 return sub_data
                 
             # 3. 格式转换（如果指定了转换格式）
-            if convert_to and convert_to.lower() in ['txt', 'json', 'srt']:
+            if convert_to and convert_to.lower() in ['txt', 'json']:
                 try:
                     converted_path = self.convert_format(
                         sub_data['path'],
@@ -411,7 +401,7 @@ class SubtitleProcessor:
         """转换字幕格式
         Args:
             input_path: 输入文件路径
-            target_format: 目标格式，支持：txt, json, srt
+            target_format: 目标格式，支持：txt, json
         Returns:
             转换后的文件路径
         Raises:
@@ -421,8 +411,7 @@ class SubtitleProcessor:
         target_format = target_format.lower()
         valid_formats = {
             'txt': self._convert_to_txt,
-            'json': self._convert_to_json,
-            'srt': self._convert_to_srt
+            'json': self._convert_to_json
         }
         
         if target_format not in valid_formats:
