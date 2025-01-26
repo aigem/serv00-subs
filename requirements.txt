@@ -1,8 +1,6 @@
 Flask==3.0.2
 Flask-Caching==2.1.0
 Flask-Compress==1.14
-Brotli==1.1.0
-brotlicffi==1.1.0.0
 yt-dlp[default]==2025.01.15
 python-dotenv
 tenacity

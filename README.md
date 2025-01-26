@@ -122,7 +122,7 @@ pkill -f "python.*src.run"
 source venv/bin/activate  # Linux
 
 # 2. 安装必要依赖
-pip install flask flask-caching flask-compress gunicorn gevent tenacity yt-dlp
+pip install flask flask-caching flask-compress gevent tenacity yt-dlp
 
 # 3. 设置环境变量（生产环境）
 export PRODUCTION=true    # Linux

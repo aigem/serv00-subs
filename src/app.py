@@ -24,7 +24,16 @@ app.config['CACHE_TYPE'] = config.CACHE_TYPE
 app.config['CACHE_DEFAULT_TIMEOUT'] = config.CACHE_TTL
 cache = Cache(app)
 
-# 启用压缩
+# 配置压缩，禁用 Brotli，只使用 gzip
+app.config['COMPRESS_ALGORITHM'] = ['gzip']
+app.config['COMPRESS_MIMETYPES'] = [
+    'text/html',
+    'text/css',
+    'text/xml',
+    'application/json',
+    'application/javascript',
+    'text/plain'
+]
 Compress(app)
 
 # 创建字幕处理器实例
