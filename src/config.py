@@ -26,22 +26,12 @@ class Config:
         )
         self.CLEANUP_INTERVAL = int(os.getenv("CLEANUP_INTERVAL", 3600))
         self.FILE_RETENTION_HOURS = int(os.getenv("FILE_RETENTION_HOURS", 24))
-        
-        # FFmpeg配置
-        self.FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
-        
+               
         # 日志配置
         self.LOG_DIR = self.BASE_DIR / 'logs'
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
         self.LOG_FORMAT = os.getenv("LOG_FORMAT", 
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        
-        # 监控配置
-        self.MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", 300))
-        self.HEALTH_CHECK_URL = os.getenv(
-            "HEALTH_CHECK_URL", 
-            "http://localhost:5000/health"
         )
 
 config = Config() 

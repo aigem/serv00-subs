@@ -376,23 +376,26 @@ class SubtitleProcessor:
             sub_data = self.download_subtitle(url, lang)
             if sub_data['status'] != 'success':
                 return sub_data
-                
-            # 3. 格式转换（如果指定了转换格式）
+            
+            # 3. 先保存到缓存并准备返回数据
+            self._save_to_cache(url, lang, None, sub_data)  # 保存原始数据
+            
+            # 4. 在后台进行格式转换（如果指定了转换格式）
             if convert_to and convert_to.lower() in ['txt', 'json']:
                 try:
                     converted_path = self.convert_format(
                         sub_data['path'],
                         convert_to.lower()
                     )
+                    # 转换完成后更新缓存
                     sub_data['converted_path'] = str(converted_path)
                     sub_data['converted_content'] = converted_path.read_text(encoding='utf-8')
+                    self._save_to_cache(url, lang, convert_to, sub_data)  # 保存转换后的数据
                 except Exception as e:
                     self.update_error_stats('convert_errors')
                     logger.error(f"转换失败: {str(e)}")
                     sub_data['convert_error'] = str(e)
             
-            # 4. 保存到缓存
-            self._save_to_cache(url, lang, convert_to, sub_data)
             return sub_data
             
         except Exception as e:

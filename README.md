@@ -4,19 +4,19 @@
 
 ## 功能特性
 
-- 🚀 **批量处理**: 支持多个YouTube URL并发下载字幕
-- 🔄 **格式转换**: 支持将SRT字幕转换为TXT、JSON格式
+- 🚀 **批量处理**: 支持多个YouTube URL并发下载字幕-TTML格式
+- 🔄 **格式转换**: 支持将TTML字幕转换为TXT、JSON格式
 - 💾 **本地缓存**: 内置简单缓存，提高重复URL处理速度
 - 🧹 **自动清理**: 定期清理过期文件，无需手动维护
 - 🛡️ **错误处理**: 完善的错误处理和重试机制
-- 🔄 **自动监控**: 服务状态监控和自动恢复
+- 🔄 **API路由**: 支持API路由，方便调用
 
 ## 系统要求
 
 - Python 3.8+
 - FFmpeg（用于格式转换）
 - 至少100MB可用磁盘空间
-- Linux系统（已在Ubuntu 20.04+测试）
+- Linux系统
 
 
 ## serv00中 python app方式的安装步骤：
@@ -44,32 +44,10 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. **安装FFmpeg**
-serv00中已经安装了ffmpeg，所以可以跳过这一步。
-
-```bash
-# Ubuntu/Debian
-sudo apt update
-sudo apt install ffmpeg -y
-```
-如果不使用sudo，请使用以下命令：
-```bash
-apt update
-apt install ffmpeg -y
-```
-
-
-5. **配置环境变量**
+4. **配置环境变量**
 ```bash
 cp .env.example .env
 # 根据需要编辑.env文件
-```
-
-6. **安装服务**
-```bash
-# 设置脚本权限并运行安装脚本
-chmod +x scripts/install_service.sh
-./scripts/install_service.sh
 ```
 
 ## 配置说明
@@ -87,8 +65,6 @@ MAX_CONCURRENT=8        # 最大并发下载数（建议不超过CPU核心数的
 CLEANUP_INTERVAL=3600   # 清理间隔(秒)
 FILE_RETENTION_HOURS=24 # 文件保留时间(小时)
 
-# FFmpeg配置
-FFMPEG_PATH=ffmpeg      # FFmpeg可执行文件路径
 ```
 
 ## 服务管理
@@ -103,18 +79,6 @@ tail -f /var/log/ytdlp/monitor.log
 
 # 查看服务日志
 tail -f /var/log/ytdlp/service.log
-```
-
-### 2. 服务控制
-```bash
-# 手动启动服务
-./scripts/start_service.sh
-
-# 停止服务
-pkill -f "python.*src.run"
-
-# 重启服务
-./scripts/monitor_service.sh
 ```
 
 ### 3. 直接运行的方式
@@ -133,7 +97,6 @@ python -m src.run
 注意事项：
 - 直接运行时需要确保已正确配置`.env`文件
 - 程序会自动处理日志记录和临时文件清理
-- 使用Ctrl+C可以优雅地停止服务
 
 ### 4. 自动监控说明
 
@@ -142,9 +105,13 @@ python -m src.run
 ### 5. 日志管理
 ```bash
 # 日志位置
-/程序文件夹下/
+/程序文件夹下
+logs/
 └── service.log  # 服务运行日志
-post 运行日志呢？
+subtitles/
+└── 字幕文件  # 字幕文件
+temp/
+└── 临时文件  # 临时文件，转换后的文件，定时清理
 
 # 日志自动轮转
 - 每日轮转
@@ -158,7 +125,7 @@ post 运行日志呢？
 curl http://localhost:5000/health
 ```
 
-### 2. 下载字幕
+### 2. 批量下载字幕 (带缓存和转换)
 ```bash
 curl -X POST http://localhost:5000/batch_subs \
 -H "Content-Type: application/json" \
@@ -173,20 +140,11 @@ curl -X POST http://localhost:5000/batch_subs \
 ```
 
 #### 请求参数说明
-
 - `urls`: YouTube视频URL列表或单个URL（必填）
 - `lang`: 字幕语言代码（可选，默认: "en"）
-- `convert`: 转换格式（可选: "txt"/"json"）
-
-#### 功能限制
-
-- 单次请求最多处理50个URL
-- 支持的字幕语言: en, zh, ja, ko, es, fr, de
-- 字幕文件大小限制: 10MB
-- URL必须是有效的YouTube视频链接
+- `convert`: 转换格式（可选: "txt"/"json"/"none"）
 
 #### 响应示例
-
 ```json
 {
     "status": "success",
@@ -195,41 +153,87 @@ curl -X POST http://localhost:5000/batch_subs \
             "status": "success",
             "url": "https://youtu.be/video1",
             "video_id": "video1",
-            "path": "/path/to/subtitle.srt",
-            "content": "字幕内容...",
+            "path": "/path/to/subtitle.ttml",
+            "content": "原始TTML内容",
             "converted_path": "/path/to/subtitle.txt",
-            "converted_content": "转换后的内容..."
+            "converted_content": "转换后的内容",
+            "type": "normal"  // 或 "auto" 表示自动生成的字幕
         }
     ]
 }
 ```
 
-## 故障排除
-
-### 1. 服务启动失败
+### 3. 快速获取字幕文本 (适用于 n8n 集成)
 ```bash
-# 检查服务状态
-./scripts/monitor_service.sh
-
-# 查看详细错误日志
-tail -f /var/log/ytdlp/service.log
+curl -X POST http://localhost:5000/quick \
+-H "Content-Type: application/json" \
+-d '{
+    "url": "https://youtu.be/video1",
+    "lang": "en"
+}'
+```
+#### 响应示例
+```json
+{
+    "status": "success",
+    "text": "字幕文本内容",
+    "thumbnail": "视频缩略图URL",
+    "title": "视频标题"
+}
 ```
 
-### 2. 监控不工作
-```bash
-# 检查crontab配置
-crontab -l
+#### 请求参数说明
+- `url`: YouTube视频URL（必填）
+- `lang`: 字幕语言代码（可选，默认: "en"）
 
-# 检查监控日志
-tail -f /var/log/ytdlp/monitor.log
+#### 响应示例
+```json
+{
+    "status": "success",
+    "text": "字幕文本内容",
+    "thumbnail": "视频缩略图URL",
+    "title": "视频标题"
+}
 ```
+
+#### 功能限制
+
+- 批量API单次请求最多处理50个URL
+- 支持的字幕语言: en, zh, ja, ko, es, fr, de
+- 字幕文件大小限制: 10MB
+- URL必须是有效的YouTube视频链接
+- 字幕格式：
+  - 下载格式：TTML
+  - 转换格式：TXT, JSON
+- 缓存时间：默认30分钟
+
+#### API 特点说明
+
+1. **批量下载API** (`/batch_subs`)
+   - 支持多URL并发处理
+   - 提供缓存机制
+   - 支持格式转换
+   - 保存文件到本地
+   - 返回完整的处理信息
+
+2. **快速API** (`/quick`)
+   - 单URL快速处理
+   - 直接返回文本内容
+   - 包含视频元数据（标题、缩略图）
+   - 不保存转换文件
+   - 适合需要快速响应的场景
+
+#### 使用建议
+
+- 批量处理多个视频时使用 `/batch_subs`
+- 需要快速获取单个视频字幕文本时使用 `/quick`
+- 需要获取视频元数据时使用 `/quick`
+- 需要保存文件到本地时使用 `/batch_subs`
 
 ### 3. 常见问题解决
 
 - **多个服务实例**: 监控脚本会自动终止多余的实例
 - **服务无响应**: 监控脚本会自动重启无响应的服务
-- **日志写入失败**: 检查 `/var/log/ytdlp` 目录权限
-- **FFmpeg相关问题**: 检查FFmpeg安装和路径配置
 - **下载失败**: 检查网络连接和URL有效性
 
 ## 维护说明
@@ -244,15 +248,10 @@ tail -f /var/log/ytdlp/monitor.log
 - 检查磁盘空间使用情况
 - 确认crontab任务正常运行
 
-### 3. 升级注意事项
-- 升级前停止服务
-- 备份配置文件
-- 升级后重新运行安装脚本
-
 ## 版本信息
 
-当前版本：1.1.0
+当前版本：1.2.0
 - 支持YouTube字幕批量下载
-- 支持SRT到TXT/JSON的转换
+- 支持TTML到TXT/JSON的转换
 - 内置简单缓存和自动清理
-- 服务监控和自动恢复
+- 支持API路由
