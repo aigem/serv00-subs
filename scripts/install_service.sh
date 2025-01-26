@@ -33,7 +33,11 @@ API_HOST=${API_HOST:-"0.0.0.0"}
 
 # 检查Python版本
 python_version=$(python -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
-if (( $(echo "$python_version < 3.8" | bc -l) )); then
+echo "当前 Python 版本: $python_version"
+
+# 将版本号转换为整数进行比较（例如：3.8 -> 308）
+version_num=$(echo "$python_version" | awk -F. '{ printf "%d%02d\n", $1, $2 }')
+if [ "$version_num" -lt 308 ]; then
     echo "错误: 需要Python 3.8或更高版本"
     exit 1
 fi
