@@ -6,4 +6,4 @@ yt-dlp
 python-dotenv
 tenacity
 brotlicffi
-webvtt-py
+pycaption

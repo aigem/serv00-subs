@@ -9,7 +9,7 @@ from queue import Queue
 import subprocess
 from tenacity import retry, stop_after_attempt, wait_exponential
 import yt_dlp
-import webvtt
+from pycaption import TTMLReader, SRTWriter, DFXPWriter
 from .config import config
 from functools import lru_cache
 from datetime import datetime, timedelta
@@ -79,7 +79,9 @@ class SubtitleProcessor:
         wait=wait_exponential(multiplier=1, min=2, max=10)
     )
     def download_subtitle(self, url: str, lang: str) -> Dict:
-        """下载字幕(带重试机制)"""
+        """下载字幕(带重试机制)
+        先尝试下载普通字幕，如果没有再尝试自动生成的字幕
+        """
         try:
             logger.info(f"开始下载字幕: URL={url}, 语言={lang}")
             
@@ -88,50 +90,75 @@ class SubtitleProcessor:
                 logger.error(error_msg)
                 self.update_error_stats('validation_errors')
                 raise ValueError(error_msg)
-                
-            self.ydl_opts['subtitleslangs'] = [lang]
             
-            with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
+            # 1. 先尝试下载普通字幕
+            normal_opts = self.ydl_opts.copy()
+            normal_opts.update({
+                'writesubtitles': True,
+                'writeautomaticsub': False,
+                'subtitleslangs': [lang],
+                'subtitlesformat': 'ttml'
+            })
+            
+            with yt_dlp.YoutubeDL(normal_opts) as ydl:
                 try:
-                    logger.info(f"正在提取视频信息: {url}")
+                    logger.info(f"尝试下载普通字幕: {url}")
                     info = ydl.extract_info(url, download=True)
                     video_id = info['id']
-                    logger.info(f"视频ID: {video_id}")
                     
-                    # 检查所有可能的字幕文件扩展名
-                    for ext in ['vtt', 'ttml']:
-                        sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.{ext}"
-                        auto_sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.auto.{ext}"
-                        
-                        if sub_path.exists():
-                            target_path = sub_path
-                            break
-                        elif auto_sub_path.exists():
-                            target_path = auto_sub_path
-                            break
-                    else:
-                        self.update_error_stats('download_errors')
-                        raise FileNotFoundError("字幕下载失败")
+                    # 检查普通字幕文件
+                    sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.ttml"
+                    if sub_path.exists():
+                        logger.info(f"找到普通字幕: {sub_path}")
+                        content = sub_path.read_text(encoding='utf-8')
+                        return {
+                            'status': 'success',
+                            'url': url,
+                            'video_id': video_id,
+                            'path': str(sub_path),
+                            'content': content,
+                            'type': 'normal'
+                        }
+                except Exception as e:
+                    logger.info(f"未找到普通字幕，尝试自动生成字幕: {str(e)}")
+            
+            # 2. 如果没有普通字幕，尝试下载自动生成的字幕
+            auto_opts = self.ydl_opts.copy()
+            auto_opts.update({
+                'writesubtitles': False,
+                'writeautomaticsub': True,
+                'subtitleslangs': [lang],
+                'subtitlesformat': 'ttml'
+            })
+            
+            with yt_dlp.YoutubeDL(auto_opts) as ydl:
+                try:
+                    logger.info(f"尝试下载自动生成字幕: {url}")
+                    info = ydl.extract_info(url, download=True)
+                    video_id = info['id']
                     
-                    content = target_path.read_text(encoding='utf-8')
-                    logger.info(f"字幕下载成功: {url}, 大小: {len(content)} 字符")
+                    # 检查自动生成的字幕文件
+                    auto_sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.auto.ttml"
+                    if auto_sub_path.exists():
+                        logger.info(f"找到自动生成字幕: {auto_sub_path}")
+                        content = auto_sub_path.read_text(encoding='utf-8')
+                        return {
+                            'status': 'success',
+                            'url': url,
+                            'video_id': video_id,
+                            'path': str(auto_sub_path),
+                            'content': content,
+                            'type': 'auto'
+                        }
                     
-                    result = {
-                        'status': 'success',
-                        'url': url,
-                        'video_id': video_id,
-                        'path': str(target_path),
-                        'content': content
-                    }
-                    
-                    return result
+                    raise FileNotFoundError("未找到任何字幕文件")
                     
                 except yt_dlp.utils.DownloadError as e:
                     self.update_error_stats('download_errors')
                     error_msg = str(e)
                     logger.error(f"yt-dlp 下载错误: {error_msg}")
                     if 'No subtitles available' in error_msg:
-                        return {'status': 'error', 'code': 'SUB_NOT_FOUND', 'message': '没有找到字幕'}
+                        return {'status': 'error', 'code': 'SUB_NOT_FOUND', 'message': '没有找到任何字幕'}
                     return {'status': 'error', 'code': 'DOWNLOAD_FAILED', 'message': f'下载失败: {error_msg}'}
                     
         except Exception as e:
@@ -198,48 +225,54 @@ class SubtitleProcessor:
             logger.error(f"清理文件失败: {str(e)}")
 
     def _convert_to_txt(self, input_path: Path) -> Path:
-        """使用 webvtt-py 将字幕文件转换为纯文本格式"""
+        """将 TTML 转换为纯文本格式"""
         output_path = config.TEMP_DIR / f"{input_path.stem}.txt"
         try:
-            # 读取 WebVTT 文件
-            captions = webvtt.read(str(input_path))
+            # 读取 TTML 文件
+            with open(input_path, 'r', encoding='utf-8') as f:
+                ttml_content = f.read()
             
-            # 提取纯文本并处理
+            # 解析 TTML
+            reader = TTMLReader()
+            captions = reader.read(ttml_content)
+            
+            # 提取纯文本
             lines = []
-            for caption in captions:
-                # 移除多余的空白字符并分割多行
-                text_lines = [line.strip() for line in caption.text.split('\n')]
-                # 过滤空行并添加到结果中
-                lines.extend(line for line in text_lines if line)
+            for caption in captions.get_captions('en-US'):
+                text = caption.get_text()
+                if text.strip():
+                    lines.append(text)
             
-            # 写入纯文本文件
+            # 写入文本文件
             text_content = '\n'.join(lines)
             with output_path.open('w', encoding='utf-8') as f:
                 f.write(text_content)
             
             return output_path
-        except webvtt.errors.MalformedFileError as e:
-            logger.error(f"WebVTT 文件格式错误: {e}")
-            raise RuntimeError(f"WebVTT 解析失败: {str(e)}")
         except Exception as e:
             logger.error(f"文本转换失败: {e}")
             raise RuntimeError(f"文本转换失败: {str(e)}")
 
     def _convert_to_json(self, input_path: Path) -> Path:
-        """使用 webvtt-py 将字幕文件转换为 JSON 格式"""
+        """将 TTML 转换为 JSON 格式"""
         output_path = config.TEMP_DIR / f"{input_path.stem}.json"
         try:
-            # 读取 WebVTT 文件
-            captions = webvtt.read(str(input_path))
+            # 读取 TTML 文件
+            with open(input_path, 'r', encoding='utf-8') as f:
+                ttml_content = f.read()
+            
+            # 解析 TTML
+            reader = TTMLReader()
+            captions = reader.read(ttml_content)
             
             # 转换为 JSON 格式
             entries = []
-            for i, caption in enumerate(captions, 1):
+            for i, caption in enumerate(captions.get_captions('en-US'), 1):
                 entry = {
                     'index': i,
-                    'start': caption.start,
-                    'end': caption.end,
-                    'text': caption.text.strip()
+                    'start': str(caption.start),
+                    'end': str(caption.end),
+                    'text': caption.get_text()
                 }
                 entries.append(entry)
             
@@ -248,46 +281,30 @@ class SubtitleProcessor:
                 json.dump(entries, f, ensure_ascii=False, indent=2)
             
             return output_path
-        except webvtt.errors.MalformedFileError as e:
-            logger.error(f"WebVTT 文件格式错误: {e}")
-            raise RuntimeError(f"WebVTT 解析失败: {str(e)}")
         except Exception as e:
             logger.error(f"JSON 转换失败: {e}")
             raise RuntimeError(f"JSON 转换失败: {str(e)}")
 
     def _convert_to_srt(self, input_path: Path) -> Path:
-        """将 WebVTT 转换为 SRT 格式"""
+        """将 TTML 转换为 SRT 格式"""
         output_path = config.TEMP_DIR / f"{input_path.stem}.srt"
         try:
-            # 读取 WebVTT 文件
-            captions = webvtt.read(str(input_path))
+            # 读取 TTML 文件
+            with open(input_path, 'r', encoding='utf-8') as f:
+                ttml_content = f.read()
             
-            # 转换为 SRT 格式
-            srt_lines = []
-            for i, caption in enumerate(captions, 1):
-                # 添加序号
-                srt_lines.append(str(i))
-                
-                # 转换时间格式从 HH:MM:SS.mmm 到 HH:MM:SS,mmm
-                start = caption.start.replace('.', ',')
-                end = caption.end.replace('.', ',')
-                srt_lines.append(f"{start} --> {end}")
-                
-                # 添加字幕文本
-                srt_lines.append(caption.text.strip())
-                
-                # 添加空行
-                srt_lines.append('')
+            # 使用 pycaption 转换
+            reader = TTMLReader()
+            writer = SRTWriter()
+            
+            captions = reader.read(ttml_content)
+            srt_content = writer.write(captions)
             
             # 写入 SRT 文件
-            srt_content = '\n'.join(srt_lines)
             with output_path.open('w', encoding='utf-8') as f:
                 f.write(srt_content)
             
             return output_path
-        except webvtt.errors.MalformedFileError as e:
-            logger.error(f"WebVTT 文件格式错误: {e}")
-            raise RuntimeError(f"WebVTT 解析失败: {str(e)}")
         except Exception as e:
             logger.error(f"SRT 转换失败: {e}")
             raise RuntimeError(f"SRT 转换失败: {str(e)}")
