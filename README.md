@@ -28,7 +28,7 @@ cd /home/gepi/domains/ytdlp.ydns.eu
 
 git clone https://github.com/aigem/serv00-subs.git public_python
 # 复制serv00-subs/下所有文件夹及文件到 /home/gepi/domains/ytdlp.ydns.eu
-cp -r serv00-subs/ /home/gepi/domains/ytdlp.ydns.eu/public_python
+cd public_python
 ```
 
 2. **创建虚拟环境**
@@ -43,6 +43,7 @@ pip install -r requirements.txt
 ```
 
 4. **安装FFmpeg**
+serv00中已经安装了ffmpeg，所以可以跳过这一步。
 ```bash
 # Ubuntu/Debian
 sudo apt update
@@ -53,6 +54,7 @@ sudo apt install ffmpeg -y
 apt update
 apt install ffmpeg -y
 ```
+
 
 5. **配置环境变量**
 ```bash
@@ -118,24 +120,18 @@ pkill -f "python.*src.run"
 ```bash
 # 1. 激活虚拟环境
 source venv/bin/activate  # Linux
-# 或
-.\venv\Scripts\activate   # Windows
 
 # 2. 安装必要依赖
 pip install flask flask-caching flask-compress gunicorn gevent tenacity yt-dlp
 
 # 3. 设置环境变量（生产环境）
 export PRODUCTION=true    # Linux
-# 或
-$env:PRODUCTION="true"   # Windows PowerShell
 
 # 4. 直接运行程序
 python -m src.run
 
 # 开发模式运行（自动重载）
 export PRODUCTION=false   # Linux
-# 或
-$env:PRODUCTION="false"  # Windows PowerShell
 python -m src.run
 ```
 

@@ -9,18 +9,21 @@ VENV_PATH = PROJECT_DIR / 'venv'
 # 设置 VIRTUAL_ENV 环境变量
 os.environ['VIRTUAL_ENV'] = str(VENV_PATH)
 
-# 将虚拟环境的 Scripts 目录添加到 PATH (Windows)
-os.environ['PATH'] = str(VENV_PATH / 'Scripts') + os.pathsep + os.environ['PATH']
+# 设置 Linux/Unix 路径
+python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+site_packages = VENV_PATH / 'lib' / python_version / 'site-packages'
+scripts_path = VENV_PATH / 'bin'
+
+# 将虚拟环境的 bin 目录添加到 PATH
+os.environ['PATH'] = str(scripts_path) + os.pathsep + os.environ['PATH']
 
 # 添加虚拟环境的 site-packages 到 sys.path
-site_packages = VENV_PATH / 'Lib/site-packages'
 sys.path.insert(0, str(site_packages))
 
 # 将应用的路径添加到 sys.path 中
-sys.path.append(str(PROJECT_DIR))
+sys.path.insert(0, str(PROJECT_DIR))
 
-# 设置生产环境标志，但不使用 gunicorn
-os.environ['PRODUCTION'] = 'true'
+# 设置生产环境标志
 os.environ['FLASK_ENV'] = 'production'
 
 # 导入 Flask app 实例
