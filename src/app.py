@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify
-from flask_caching import Cache
 from .subtitle import SubtitleProcessor
 from .config import config
 import logging
@@ -48,11 +47,6 @@ logger.addHandler(stream_handler)
 
 app = Flask(__name__)
 
-# 配置缓存
-app.config['CACHE_TYPE'] = config.CACHE_TYPE
-app.config['CACHE_DEFAULT_TIMEOUT'] = config.CACHE_TTL
-cache = Cache(app)
-
 # 创建字幕处理器实例
 subtitle_processor = SubtitleProcessor()
 
@@ -73,11 +67,11 @@ def health_check():
     })
 
 @app.route('/batch_subs', methods=['POST'])
-@cache.memoize(timeout=config.CACHE_TTL)
 def batch_download():
     """批量字幕处理接口"""
     try:
         data = request.get_json()
+        logger.info(f"收到字幕下载请求: {data}")
         
         if not data or 'urls' not in data:
             return jsonify({
@@ -98,7 +92,9 @@ def batch_download():
         lang = data.get('lang', 'en')
         convert_to = data.get('convert')
         
+        logger.info(f"开始处理URLs: {urls}, 语言: {lang}, 转换格式: {convert_to}")
         results = subtitle_processor.process_batch(urls, lang, convert_to)
+        logger.info(f"处理完成，结果: {results}")
         
         return jsonify({
             'status': 'success',
@@ -106,10 +102,11 @@ def batch_download():
         })
         
     except Exception as e:
-        logging.error(f"处理请求失败: {str(e)}")
+        error_msg = str(e)
+        logger.error(f"处理请求失败: {error_msg}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': error_msg
         }), 500
 
 @app.errorhandler(404)

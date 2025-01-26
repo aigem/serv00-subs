@@ -9,6 +9,7 @@ from queue import Queue
 import subprocess
 from tenacity import retry, stop_after_attempt, wait_exponential
 import yt_dlp
+import webvtt
 from .config import config
 
 logger = logging.getLogger(__name__)
@@ -181,56 +182,99 @@ class SubtitleProcessor:
             logger.error(f"清理文件失败: {str(e)}")
 
     def _convert_to_txt(self, input_path: Path) -> Path:
-        """优化的TXT转换"""
+        """使用 webvtt-py 将字幕文件转换为纯文本格式"""
         output_path = config.TEMP_DIR / f"{input_path.stem}.txt"
         try:
-            subprocess.run([
-                config.FFMPEG_PATH,
-                '-loglevel', 'error',
-                '-i', str(input_path),
-                '-f', 'srt',
-                str(output_path)
-            ], check=True, capture_output=True)
+            # 读取 WebVTT 文件
+            captions = webvtt.read(str(input_path))
+            
+            # 提取纯文本并处理
+            lines = []
+            for caption in captions:
+                # 移除多余的空白字符并分割多行
+                text_lines = [line.strip() for line in caption.text.split('\n')]
+                # 过滤空行并添加到结果中
+                lines.extend(line for line in text_lines if line)
+            
+            # 写入纯文本文件
+            text_content = '\n'.join(lines)
+            with output_path.open('w', encoding='utf-8') as f:
+                f.write(text_content)
+            
             return output_path
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"FFmpeg转换失败: {str(e)}")
+        except webvtt.errors.MalformedFileError as e:
+            logger.error(f"WebVTT 文件格式错误: {e}")
+            raise RuntimeError(f"WebVTT 解析失败: {str(e)}")
+        except Exception as e:
+            logger.error(f"文本转换失败: {e}")
+            raise RuntimeError(f"文本转换失败: {str(e)}")
 
     def _convert_to_json(self, input_path: Path) -> Path:
-        """优化的JSON转换"""
+        """使用 webvtt-py 将字幕文件转换为 JSON 格式"""
         output_path = config.TEMP_DIR / f"{input_path.stem}.json"
-        
         try:
-            with input_path.open('r', encoding='utf-8') as f:
-                srt_content = f.read()
-                
-            entries = []
-            current_entry = {}
+            # 读取 WebVTT 文件
+            captions = webvtt.read(str(input_path))
             
-            for line in srt_content.split('\n'):
-                line = line.strip()
-                if line.isdigit():
-                    if current_entry:
-                        entries.append(current_entry)
-                    current_entry = {'index': int(line)}
-                elif '-->' in line:
-                    start, end = line.split(' --> ')
-                    current_entry['start'] = start
-                    current_entry['end'] = end
-                elif line:
-                    if 'text' not in current_entry:
-                        current_entry['text'] = line
-                    else:
-                        current_entry['text'] += f'\n{line}'
-                        
-            if current_entry:
-                entries.append(current_entry)
-                
+            # 转换为 JSON 格式
+            entries = []
+            for i, caption in enumerate(captions, 1):
+                entry = {
+                    'index': i,
+                    'start': caption.start,
+                    'end': caption.end,
+                    'text': caption.text.strip()
+                }
+                entries.append(entry)
+            
+            # 写入 JSON 文件
             with output_path.open('w', encoding='utf-8') as f:
                 json.dump(entries, f, ensure_ascii=False, indent=2)
-                
+            
             return output_path
+        except webvtt.errors.MalformedFileError as e:
+            logger.error(f"WebVTT 文件格式错误: {e}")
+            raise RuntimeError(f"WebVTT 解析失败: {str(e)}")
         except Exception as e:
-            raise RuntimeError(f"JSON转换失败: {str(e)}")
+            logger.error(f"JSON 转换失败: {e}")
+            raise RuntimeError(f"JSON 转换失败: {str(e)}")
+
+    def _convert_to_srt(self, input_path: Path) -> Path:
+        """将 WebVTT 转换为 SRT 格式"""
+        output_path = config.TEMP_DIR / f"{input_path.stem}.srt"
+        try:
+            # 读取 WebVTT 文件
+            captions = webvtt.read(str(input_path))
+            
+            # 转换为 SRT 格式
+            srt_lines = []
+            for i, caption in enumerate(captions, 1):
+                # 添加序号
+                srt_lines.append(str(i))
+                
+                # 转换时间格式从 HH:MM:SS.mmm 到 HH:MM:SS,mmm
+                start = caption.start.replace('.', ',')
+                end = caption.end.replace('.', ',')
+                srt_lines.append(f"{start} --> {end}")
+                
+                # 添加字幕文本
+                srt_lines.append(caption.text.strip())
+                
+                # 添加空行
+                srt_lines.append('')
+            
+            # 写入 SRT 文件
+            srt_content = '\n'.join(srt_lines)
+            with output_path.open('w', encoding='utf-8') as f:
+                f.write(srt_content)
+            
+            return output_path
+        except webvtt.errors.MalformedFileError as e:
+            logger.error(f"WebVTT 文件格式错误: {e}")
+            raise RuntimeError(f"WebVTT 解析失败: {str(e)}")
+        except Exception as e:
+            logger.error(f"SRT 转换失败: {e}")
+            raise RuntimeError(f"SRT 转换失败: {str(e)}")
 
     def _upload_to_cdn(self, content: str, video_id: str) -> str:
         """CDN上传实现"""
@@ -277,7 +321,8 @@ class SubtitleProcessor:
         input_path = Path(input_path)
         valid_formats = {
             'txt': self._convert_to_txt,
-            'json': self._convert_to_json
+            'json': self._convert_to_json,
+            'srt': self._convert_to_srt  # 添加 SRT 转换选项
         }
         
         if target_format not in valid_formats:

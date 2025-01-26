@@ -37,10 +37,6 @@ class Config:
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         )
         
-        # 缓存配置
-        self.CACHE_TYPE = os.getenv("CACHE_TYPE", "simple")
-        self.CACHE_TTL = int(os.getenv("CACHE_TTL", 86400))
-        
         # 监控配置
         self.MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", 300))
         self.HEALTH_CHECK_URL = os.getenv(
