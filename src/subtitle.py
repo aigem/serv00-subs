@@ -25,6 +25,7 @@ class SubtitleProcessor:
         self.ydl_opts = {
             'skip_download': True,
             'writesubtitles': True,
+            'writeautomaticsub': True,
             'subtitlesformat': 'srt',
             'outtmpl': str(config.SUBTITLE_DIR / '%(id)s.%(ext)s'),
             'quiet': True
@@ -65,40 +66,70 @@ class SubtitleProcessor:
     def download_subtitle(self, url: str, lang: str) -> Dict:
         """下载字幕(带重试机制)"""
         try:
+            logger.info(f"开始下载字幕: URL={url}, 语言={lang}")
+            
             if not self.validate_url(url):
+                error_msg = f"无效的YouTube URL: {url}"
+                logger.error(error_msg)
                 self.update_error_stats('validation_errors')
-                raise ValueError("无效的YouTube URL")
+                raise ValueError(error_msg)
                 
             self.ydl_opts['subtitleslangs'] = [lang]
+            logger.debug(f"yt-dlp 配置: {self.ydl_opts}")
             
             with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                video_id = info['id']
-                sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.srt"
-                
-                if not sub_path.exists():
-                    self.update_error_stats('download_errors')
-                    raise FileNotFoundError("字幕下载失败")
+                try:
+                    logger.info(f"正在提取视频信息: {url}")
+                    info = ydl.extract_info(url, download=True)
+                    video_id = info['id']
+                    logger.info(f"视频ID: {video_id}")
                     
-                result = {
-                    'status': 'success',
-                    'url': url,
-                    'video_id': video_id,
-                    'path': str(sub_path),
-                    'content': sub_path.read_text()
-                }
-                
-                return result
-                
-        except yt_dlp.utils.DownloadError as e:
-            self.update_error_stats('download_errors')
-            if 'No subtitles available' in str(e):
-                return {'status': 'error', 'code': 'SUB_NOT_FOUND', 'message': str(e)}
-            return {'status': 'error', 'code': 'DOWNLOAD_FAILED', 'message': str(e)}
+                    sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.srt"
+                    logger.debug(f"预期字幕文件路径: {sub_path}")
+                    
+                    if not sub_path.exists():
+                        # 检查是否存在自动生成的字幕文件
+                        auto_sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.auto.srt"
+                        logger.debug(f"检查自动生成的字幕文件: {auto_sub_path}")
+                        
+                        if auto_sub_path.exists():
+                            logger.info(f"找到自动生成的字幕文件: {auto_sub_path}")
+                            sub_path = auto_sub_path
+                        else:
+                            error_msg = f"字幕文件未找到: {sub_path} 或 {auto_sub_path}"
+                            self.update_error_stats('download_errors')
+                            logger.error(error_msg)
+                            raise FileNotFoundError(f"字幕下载失败 - {error_msg}")
+                    
+                    logger.info(f"成功找到字幕文件: {sub_path}")
+                    content = sub_path.read_text(encoding='utf-8')
+                    logger.debug(f"字幕内容长度: {len(content)} 字符")
+                    
+                    result = {
+                        'status': 'success',
+                        'url': url,
+                        'video_id': video_id,
+                        'path': str(sub_path),
+                        'content': content
+                    }
+                    
+                    logger.info(f"字幕下载成功: {url}")
+                    return result
+                    
+                except yt_dlp.utils.DownloadError as e:
+                    self.update_error_stats('download_errors')
+                    error_msg = str(e)
+                    logger.error(f"yt-dlp 下载错误: {error_msg}")
+                    if 'No subtitles available' in error_msg:
+                        return {'status': 'error', 'code': 'SUB_NOT_FOUND', 'message': '没有找到字幕'}
+                    return {'status': 'error', 'code': 'DOWNLOAD_FAILED', 'message': f'下载失败: {error_msg}'}
+                    
         except Exception as e:
             self.update_error_stats('download_errors')
-            logger.error(f"下载失败: {str(e)}")
-            return {'status': 'error', 'code': 'UNKNOWN_ERROR', 'message': str(e)}
+            error_msg = str(e)
+            logger.error(f"字幕下载过程中发生未知错误: {error_msg}")
+            logger.exception("详细错误信息:")
+            return {'status': 'error', 'code': 'UNKNOWN_ERROR', 'message': f'字幕下载失败: {error_msg}'}
 
     def process_batch(self, urls: List[str], lang: str = 'en', 
                      convert_to: Optional[str] = None) -> List[Dict]:

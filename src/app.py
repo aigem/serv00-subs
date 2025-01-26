@@ -6,20 +6,36 @@ import logging
 import atexit
 import shutil
 from pathlib import Path
+import os
 
 # 确保日志目录存在
 log_dir = Path(__file__).parent.parent / 'logs'
-log_dir.mkdir(exist_ok=True)
+log_dir.mkdir(exist_ok=True, parents=True)
+
+# 设置日志文件路径
+log_file = log_dir / 'service.log'
 
 # 配置日志
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL),
     format=config.LOG_FORMAT,
     handlers=[
-        logging.FileHandler(log_dir / 'service.log'),
+        logging.FileHandler(log_file, encoding='utf-8', mode='a'),
         logging.StreamHandler()
     ]
 )
+
+# 设置根日志器
+logger = logging.getLogger()
+logger.setLevel(getattr(logging, config.LOG_LEVEL))
+
+# 确保所有模块的日志器都使用相同的配置
+for name in logging.root.manager.loggerDict:
+    logger = logging.getLogger(name)
+    logger.handlers = []
+    logger.addHandler(logging.FileHandler(log_file, encoding='utf-8', mode='a'))
+    logger.addHandler(logging.StreamHandler())
+    logger.setLevel(getattr(logging, config.LOG_LEVEL))
 
 app = Flask(__name__)
 
