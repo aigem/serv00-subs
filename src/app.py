@@ -5,13 +5,18 @@ from .config import config
 import logging
 import atexit
 import shutil
+from pathlib import Path
+
+# 确保日志目录存在
+log_dir = Path(__file__).parent.parent / 'logs'
+log_dir.mkdir(exist_ok=True)
 
 # 配置日志
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL),
     format=config.LOG_FORMAT,
     handlers=[
-        logging.FileHandler(config.LOG_DIR / 'service.log'),
+        logging.FileHandler(log_dir / 'service.log'),
         logging.StreamHandler()
     ]
 )

@@ -31,7 +31,7 @@ class Config:
         self.FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
         
         # 日志配置
-        self.LOG_DIR = Path(os.getenv("LOG_DIR", "/var/log/ytdlp"))
+        self.LOG_DIR = self.BASE_DIR / 'logs'
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
         self.LOG_FORMAT = os.getenv("LOG_FORMAT", 
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
