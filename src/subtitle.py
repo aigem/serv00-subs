@@ -189,27 +189,32 @@ class SubtitleProcessor:
         completed = 0
         results = []
         
+        logger.info(f"开始批量处理 {total} 个URL")
+        
         with ThreadPoolExecutor(
-            max_workers=config.MAX_CONCURRENT_DOWNLOADS
+            max_workers=min(config.MAX_CONCURRENT_DOWNLOADS, total)
         ) as executor:
-            future_to_url = {
-                executor.submit(self.process_single, url, lang, convert_to): url 
-                for url in urls
-            }
+            # 创建所有任务
+            futures = []
+            for url in urls:
+                future = executor.submit(self.process_single, url, lang, convert_to)
+                futures.append((future, url))
             
-            for future in as_completed(future_to_url):
-                url = future_to_url[future]
+            # 等待所有任务完成
+            for future, url in futures:
                 try:
                     result = future.result()
+                    logger.info(f"处理完成: {url}")
                     results.append(result)
                 except Exception as e:
                     self.update_error_stats('process_errors')
-                    logger.error(f"处理URL失败: {url}, 错误: {str(e)}")
+                    error_msg = str(e)
+                    logger.error(f"处理URL失败: {url}, 错误: {error_msg}")
                     results.append({
                         'status': 'error',
                         'url': url,
                         'code': 'PROCESS_FAILED',
-                        'message': str(e)
+                        'message': error_msg
                     })
                 finally:
                     completed += 1
@@ -217,6 +222,7 @@ class SubtitleProcessor:
                         f"处理进度: {completed}/{total} ({completed/total*100:.1f}%)"
                     )
         
+        logger.info(f"批量处理完成，成功处理 {len([r for r in results if r.get('status') == 'success'])} 个URL")
         return results
 
     def _clean_old_files(self):
