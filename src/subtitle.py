@@ -9,11 +9,11 @@ from queue import Queue
 import subprocess
 from tenacity import retry, stop_after_attempt, wait_exponential
 import yt_dlp
-from pycaption import TTMLReader, SRTWriter, DFXPWriter
 from .config import config
 from functools import lru_cache
 from datetime import datetime, timedelta
 import os
+import xml.etree.ElementTree as ET
 
 logger = logging.getLogger(__name__)
 
@@ -232,15 +232,17 @@ class SubtitleProcessor:
             with open(input_path, 'r', encoding='utf-8') as f:
                 ttml_content = f.read()
             
-            # 解析 TTML
-            reader = TTMLReader()
-            captions = reader.read(ttml_content)
+            # 解析 TTML XML
+            root = ET.fromstring(ttml_content)
+            # 查找所有包含文本的元素（通常在 p 标签中）
+            # 使用命名空间通配符 {*} 来匹配任何命名空间
+            text_elements = root.findall(".//{*}p")
             
             # 提取纯文本
             lines = []
-            for caption in captions.get_captions('en-US'):
-                text = caption.get_text()
-                if text.strip():
+            for elem in text_elements:
+                text = ''.join(elem.itertext()).strip()
+                if text:
                     lines.append(text)
             
             # 写入文本文件
@@ -261,20 +263,27 @@ class SubtitleProcessor:
             with open(input_path, 'r', encoding='utf-8') as f:
                 ttml_content = f.read()
             
-            # 解析 TTML
-            reader = TTMLReader()
-            captions = reader.read(ttml_content)
+            # 解析 TTML XML
+            root = ET.fromstring(ttml_content)
+            # 查找所有 p 标签
+            text_elements = root.findall(".//{*}p")
             
             # 转换为 JSON 格式
             entries = []
-            for i, caption in enumerate(captions.get_captions('en-US'), 1):
-                entry = {
-                    'index': i,
-                    'start': str(caption.start),
-                    'end': str(caption.end),
-                    'text': caption.get_text()
-                }
-                entries.append(entry)
+            for i, elem in enumerate(text_elements, 1):
+                # 获取开始和结束时间
+                begin = elem.get('begin', '')
+                end = elem.get('end', '')
+                # 获取文本内容
+                text = ''.join(elem.itertext()).strip()
+                if text:
+                    entry = {
+                        'index': i,
+                        'start': begin,
+                        'end': end,
+                        'text': text
+                    }
+                    entries.append(entry)
             
             # 写入 JSON 文件
             with output_path.open('w', encoding='utf-8') as f:
