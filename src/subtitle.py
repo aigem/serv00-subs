@@ -30,9 +30,8 @@ class SubtitleProcessor:
             'skip_download': True,
             'writesubtitles': True,
             'writeautomaticsub': True,
-            'subtitlesformat': 'srt',
+            'subtitlesformat': 'vtt',
             'subtitleslangs': ['en'],
-            'convert_subs': 'srt',
             'ignoreerrors': True,
             'no_warnings': True,
             'extract_flat': True,
@@ -99,14 +98,17 @@ class SubtitleProcessor:
                     video_id = info['id']
                     logger.info(f"视频ID: {video_id}")
                     
-                    # 检查字幕文件
-                    sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.srt"
-                    auto_sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.auto.srt"
-                    
-                    if sub_path.exists():
-                        target_path = sub_path
-                    elif auto_sub_path.exists():
-                        target_path = auto_sub_path
+                    # 检查所有可能的字幕文件扩展名
+                    for ext in ['vtt', 'srt']:
+                        sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.{ext}"
+                        auto_sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.auto.{ext}"
+                        
+                        if sub_path.exists():
+                            target_path = sub_path
+                            break
+                        elif auto_sub_path.exists():
+                            target_path = auto_sub_path
+                            break
                     else:
                         self.update_error_stats('download_errors')
                         raise FileNotFoundError("字幕下载失败")
