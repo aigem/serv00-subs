@@ -6,6 +6,7 @@ import atexit
 import shutil
 from pathlib import Path
 import os
+from .routes import bp
 
 # 确保日志目录存在
 log_dir = Path(__file__).parent.parent / 'logs'
@@ -45,7 +46,19 @@ stream_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(stream_handler)
 
+# 创建Flask应用
 app = Flask(__name__)
+
+# 注册Blueprint
+app.register_blueprint(bp, url_prefix='/')
+
+# 添加CORS支持
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
+    return response
 
 # 创建字幕处理器实例
 subtitle_processor = SubtitleProcessor()
@@ -151,4 +164,11 @@ def shutdown_handler():
     except Exception as e:
         logging.error(f"关闭时发生错误: {e}")
 
-atexit.register(shutdown_handler) 
+atexit.register(shutdown_handler)
+
+if __name__ == '__main__':
+    app.run(
+        host=config.API_HOST,
+        port=config.API_PORT,
+        debug=True
+    ) 

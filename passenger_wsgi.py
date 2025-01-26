@@ -24,26 +24,8 @@ if str(site_packages) not in sys.path:
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-# 打印调试信息到日志
-import logging
-logging.basicConfig(filename='/tmp/passenger_wsgi.log', level=logging.DEBUG)
-logging.debug(f"Python Version: {sys.version}")
-logging.debug(f"Project Directory: {PROJECT_DIR}")
-logging.debug(f"Virtual Env Path: {VENV_PATH}")
-logging.debug(f"Site Packages: {site_packages}")
-logging.debug(f"Scripts Path: {scripts_path}")
-logging.debug(f"sys.path: {sys.path}")
-logging.debug(f"PATH: {os.environ['PATH']}")
-
-# 验证 site-packages 目录是否存在
-if not site_packages.exists():
-    logging.error(f"Site packages directory does not exist: {site_packages}")
-    raise RuntimeError(f"Site packages directory not found: {site_packages}")
-
 # 设置生产环境标志
 os.environ['FLASK_ENV'] = 'production'
 
 # 导入 Flask app 实例
 from src.app import app as application
-
-# Passenger 会直接使用 application 变量

@@ -74,9 +74,6 @@ FILE_RETENTION_HOURS=24 # 文件保留时间(小时)
 # 查看服务状态
 curl http://localhost:5000/health
 
-# 查看监控日志
-tail -f /var/log/ytdlp/monitor.log
-
 # 查看服务日志
 tail -f /var/log/ytdlp/service.log
 ```
