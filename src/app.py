@@ -71,7 +71,13 @@ def batch_download():
     """批量字幕处理接口"""
     try:
         data = request.get_json()
-        logger.info(f"收到字幕下载请求: {data}")
+        # 记录请求信息时排除内容数据
+        log_data = {
+            'urls': data.get('urls'),
+            'lang': data.get('lang'),
+            'convert': data.get('convert')
+        }
+        logger.info(f"收到字幕下载请求: {log_data}")
         
         if not data or 'urls' not in data:
             return jsonify({
@@ -94,7 +100,18 @@ def batch_download():
         
         logger.info(f"开始处理URLs: {urls}, 语言: {lang}, 转换格式: {convert_to}")
         results = subtitle_processor.process_batch(urls, lang, convert_to)
-        logger.info(f"处理完成，结果: {results}")
+        
+        # 记录结果时排除内容数据
+        log_results = []
+        for result in results:
+            log_result = result.copy()
+            if 'content' in log_result:
+                log_result['content'] = f"<{len(log_result['content'])} chars>"
+            if 'converted_content' in log_result:
+                log_result['converted_content'] = f"<{len(log_result['converted_content'])} chars>"
+            log_results.append(log_result)
+            
+        logger.info(f"处理完成，结果: {log_results}")
         
         return jsonify({
             'status': 'success',

@@ -90,7 +90,6 @@ class SubtitleProcessor:
                 raise ValueError(error_msg)
                 
             self.ydl_opts['subtitleslangs'] = [lang]
-            logger.debug(f"yt-dlp 配置: {self.ydl_opts}")
             
             with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
                 try:
@@ -114,15 +113,17 @@ class SubtitleProcessor:
                         self.update_error_stats('download_errors')
                         raise FileNotFoundError("字幕下载失败")
                     
+                    content = target_path.read_text(encoding='utf-8')
+                    logger.info(f"字幕下载成功: {url}, 大小: {len(content)} 字符")
+                    
                     result = {
                         'status': 'success',
                         'url': url,
                         'video_id': video_id,
                         'path': str(target_path),
-                        'content': target_path.read_text(encoding='utf-8')
+                        'content': content
                     }
                     
-                    logger.info(f"字幕下载成功: {url}")
                     return result
                     
                 except yt_dlp.utils.DownloadError as e:
@@ -307,7 +308,7 @@ class SubtitleProcessor:
             # 检查是否过期
             timestamp = self._cache_timestamps.get(cache_key)
             if timestamp and datetime.now() - timestamp < timedelta(minutes=self.cache_ttl):
-                logger.info(f"从缓存获取结果: {cache_key}")
+                logger.info(f"从缓存获取结果: {url}")
                 return self._cache[cache_key]
             else:
                 # 删除过期缓存
@@ -337,7 +338,12 @@ class SubtitleProcessor:
             
     def process_single(self, url: str, lang: str, 
                       convert_to: Optional[str] = None) -> Dict:
-        """处理单个URL的字幕"""
+        """处理单个URL的字幕
+        Args:
+            url: YouTube URL
+            lang: 字幕语言代码
+            convert_to: 转换格式，可选值：txt, json, srt, None（默认不转换）
+        """
         try:
             # 1. 检查缓存
             cached_result = self._get_from_cache(url, lang, convert_to)
@@ -349,12 +355,12 @@ class SubtitleProcessor:
             if sub_data['status'] != 'success':
                 return sub_data
                 
-            # 3. 格式转换
-            if convert_to:
+            # 3. 格式转换（如果指定了转换格式）
+            if convert_to and convert_to.lower() in ['txt', 'json', 'srt']:
                 try:
                     converted_path = self.convert_format(
                         sub_data['path'],
-                        convert_to
+                        convert_to.lower()
                     )
                     sub_data['converted_path'] = str(converted_path)
                     sub_data['converted_content'] = converted_path.read_text(encoding='utf-8')
@@ -376,16 +382,25 @@ class SubtitleProcessor:
             }
 
     def convert_format(self, input_path: str, target_format: str) -> Path:
-        """转换字幕格式"""
+        """转换字幕格式
+        Args:
+            input_path: 输入文件路径
+            target_format: 目标格式，支持：txt, json, srt
+        Returns:
+            转换后的文件路径
+        Raises:
+            ValueError: 不支持的格式
+        """
         input_path = Path(input_path)
+        target_format = target_format.lower()
         valid_formats = {
             'txt': self._convert_to_txt,
             'json': self._convert_to_json,
-            'srt': self._convert_to_srt  # 添加 SRT 转换选项
+            'srt': self._convert_to_srt
         }
         
         if target_format not in valid_formats:
-            raise ValueError(f"不支持的格式: {target_format}")
+            raise ValueError(f"不支持的格式: {target_format}，支持的格式: {', '.join(valid_formats.keys())}")
             
         return valid_formats[target_format](input_path)
 
