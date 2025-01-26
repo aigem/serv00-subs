@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_caching import Cache
 from flask_compress import Compress
 from .subtitle import SubtitleProcessor
-from .config import CACHE_TYPE, CACHE_TTL, config
+from .config import config
 import logging
 import atexit
 import shutil
@@ -47,7 +47,7 @@ def health_check():
     })
 
 @app.route('/batch_subs', methods=['POST'])
-@cache.memoize(timeout=CACHE_TTL)
+@cache.memoize(timeout=config.CACHE_TTL)
 def batch_download():
     """批量字幕处理接口"""
     try:

@@ -108,14 +108,51 @@ pkill -f "python.*src.run"
 ./scripts/monitor_service.sh
 ```
 
-### 3. 自动监控说明
+### 3. 直接运行（不使用crontab）
+如果您不想使用crontab进行服务管理，可以直接运行Python程序：
+
+```bash
+# 1. 激活虚拟环境
+source venv/bin/activate  # Linux
+# 或
+.\venv\Scripts\activate   # Windows
+
+# 2. 安装必要依赖
+pip install flask flask-caching flask-compress gunicorn gevent tenacity yt-dlp
+
+# 3. 设置环境变量（生产环境）
+export PRODUCTION=true    # Linux
+# 或
+$env:PRODUCTION="true"   # Windows PowerShell
+
+# 4. 直接运行程序
+python -m src.run
+
+# 开发模式运行（自动重载）
+export PRODUCTION=false   # Linux
+# 或
+$env:PRODUCTION="false"  # Windows PowerShell
+python -m src.run
+```
+
+运行模式说明：
+- 生产模式 (PRODUCTION=true)：使用gunicorn作为WSGI服务器，支持多工作进程
+- 开发模式 (PRODUCTION=false)：使用Flask内置服务器，支持自动重载
+
+注意事项：
+- 直接运行时需要确保已正确配置`.env`文件
+- 生产模式仅支持Linux系统（因为依赖gunicorn）
+- 程序会自动处理日志记录和临时文件清理
+- 使用Ctrl+C可以优雅地停止服务
+
+### 4. 自动监控说明
 
 - **监控频率**: 每5分钟自动检查服务状态
 - **健康检查**: 通过HTTP接口验证服务是否正常响应
 - **自动恢复**: 发现服务异常时自动重启
 - **开机自启**: 系统重启后自动启动服务
 
-### 4. 日志管理
+### 5. 日志管理
 ```bash
 # 日志位置
 /var/log/ytdlp/
