@@ -30,7 +30,7 @@ class SubtitleProcessor:
             'skip_download': True,
             'writesubtitles': True,
             'writeautomaticsub': True,
-            'subtitlesformat': 'vtt',
+            'subtitlesformat': 'ttml',
             'subtitleslangs': ['en'],
             'ignoreerrors': True,
             'no_warnings': True,
@@ -99,7 +99,7 @@ class SubtitleProcessor:
                     logger.info(f"视频ID: {video_id}")
                     
                     # 检查所有可能的字幕文件扩展名
-                    for ext in ['vtt', 'srt']:
+                    for ext in ['vtt', 'ttml']:
                         sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.{ext}"
                         auto_sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.auto.{ext}"
                         
