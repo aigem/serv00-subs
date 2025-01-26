@@ -11,6 +11,9 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 import yt_dlp
 import webvtt
 from .config import config
+from functools import lru_cache
+from datetime import datetime, timedelta
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,12 @@ class SubtitleProcessor:
             'convert_errors': 0,
             'validation_errors': 0
         }
+        # 缓存过期时间（分钟）
+        self.cache_ttl = int(os.getenv("CACHE_TTL_MINUTES", 30))
+        # 缓存结果
+        self._cache = {}
+        # 缓存时间戳
+        self._cache_timestamps = {}
         
     def log_message(self, message: str, level: str = 'info'):
         """记录日志消息"""
@@ -172,12 +181,18 @@ class SubtitleProcessor:
         """清理过期文件"""
         try:
             cutoff = time.time() - (config.FILE_RETENTION_HOURS * 3600)
+            # 清理字幕目录
             for f in config.SUBTITLE_DIR.glob('*'):
                 if f.stat().st_mtime < cutoff:
                     f.unlink(missing_ok=True)
+                    logger.debug(f"清理过期字幕文件: {f}")
+            
+            # 清理临时目录
             for f in config.TEMP_DIR.glob('*'):
                 if f.stat().st_mtime < cutoff:
                     f.unlink(missing_ok=True)
+                    logger.debug(f"清理过期临时文件: {f}")
+                    
         except Exception as e:
             logger.error(f"清理文件失败: {str(e)}")
 
@@ -281,40 +296,84 @@ class SubtitleProcessor:
         # TODO: 实现实际的CDN上传逻辑
         return f"{config.CDN_URL}/{video_id}"
 
+    def _get_cache_key(self, url: str, lang: str, convert_to: Optional[str] = None) -> str:
+        """生成缓存键"""
+        return f"{url}:{lang}:{convert_to}"
+        
+    def _get_from_cache(self, url: str, lang: str, convert_to: Optional[str] = None) -> Optional[Dict]:
+        """从缓存获取结果"""
+        cache_key = self._get_cache_key(url, lang, convert_to)
+        if cache_key in self._cache:
+            # 检查是否过期
+            timestamp = self._cache_timestamps.get(cache_key)
+            if timestamp and datetime.now() - timestamp < timedelta(minutes=self.cache_ttl):
+                logger.info(f"从缓存获取结果: {cache_key}")
+                return self._cache[cache_key]
+            else:
+                # 删除过期缓存
+                self._cache.pop(cache_key, None)
+                self._cache_timestamps.pop(cache_key, None)
+        return None
+        
+    def _save_to_cache(self, url: str, lang: str, convert_to: Optional[str], result: Dict):
+        """保存结果到缓存"""
+        cache_key = self._get_cache_key(url, lang, convert_to)
+        self._cache[cache_key] = result
+        self._cache_timestamps[cache_key] = datetime.now()
+        
+        # 清理过期缓存
+        self._clean_expired_cache()
+        
+    def _clean_expired_cache(self):
+        """清理过期缓存"""
+        now = datetime.now()
+        expired_keys = [
+            key for key, timestamp in self._cache_timestamps.items()
+            if now - timestamp >= timedelta(minutes=self.cache_ttl)
+        ]
+        for key in expired_keys:
+            self._cache.pop(key, None)
+            self._cache_timestamps.pop(key, None)
+            
     def process_single(self, url: str, lang: str, 
                       convert_to: Optional[str] = None) -> Dict:
         """处理单个URL的字幕"""
-        temp_files = []
         try:
-            # 1. 下载字幕
+            # 1. 检查缓存
+            cached_result = self._get_from_cache(url, lang, convert_to)
+            if cached_result:
+                return cached_result
+                
+            # 2. 下载字幕
             sub_data = self.download_subtitle(url, lang)
             if sub_data['status'] != 'success':
                 return sub_data
                 
-            # 2. 格式转换
+            # 3. 格式转换
             if convert_to:
                 try:
                     converted_path = self.convert_format(
                         sub_data['path'],
                         convert_to
                     )
-                    temp_files.append(converted_path)
                     sub_data['converted_path'] = str(converted_path)
-                    sub_data['converted_content'] = converted_path.read_text()
+                    sub_data['converted_content'] = converted_path.read_text(encoding='utf-8')
                 except Exception as e:
                     self.update_error_stats('convert_errors')
                     logger.error(f"转换失败: {str(e)}")
                     sub_data['convert_error'] = str(e)
-                
+            
+            # 4. 保存到缓存
+            self._save_to_cache(url, lang, convert_to, sub_data)
             return sub_data
             
-        finally:
-            # 清理临时文件
-            for f in temp_files:
-                try:
-                    f.unlink(missing_ok=True)
-                except Exception as e:
-                    logger.error(f"清理临时文件失败: {e}")
+        except Exception as e:
+            logger.error(f"处理单个URL失败: {str(e)}")
+            return {
+                'status': 'error',
+                'code': 'PROCESS_FAILED',
+                'message': str(e)
+            }
 
     def convert_format(self, input_path: str, target_format: str) -> Path:
         """转换字幕格式"""
