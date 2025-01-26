@@ -1,0 +1,67 @@
+{
+    "name": "down-subtitles",
+    "nodes": [
+        {
+            "parameters": {},
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+                0,
+                0
+            ],
+            "id": "f65c24b6-141f-445a-966f-5d076d137c45",
+            "name": "When clicking 'Test workflow'"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://ytdlp.ydns.eu/batch_subs",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "{\n    \"urls\": [\n        \"https://www.youtube.com/watch?v=lDRIauu4is0\"\n    ],\n    \"lang\": \"en\",\n    \"convert\": \"txt\"\n}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                220,
+                0
+            ],
+            "id": "72074427-ee94-4ba6-9006-561bb5cc17f0",
+            "name": "HTTP Request"
+        }
+    ],
+    "pinData": {},
+    "connections": {
+        "When clicking 'Test workflow'": {
+            "main": [
+                [
+                    {
+                        "node": "HTTP Request",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": false,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "versionId": "31b5829e-23f3-433a-9238-7186280a4058",
+    "meta": {
+        "instanceId": "636396f02b6571e40d8fe91cba550515c0cdc0e7d314c210e00b02256375a796"
+    },
+    "id": "PEnzYJSG5JSpfYiy",
+    "tags": []
+}

@@ -15,7 +15,7 @@ log_dir.mkdir(exist_ok=True, parents=True)
 # 设置日志文件路径
 log_file = log_dir / 'service.log'
 
-# 配置日志
+# 配置根日志器
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL),
     format=config.LOG_FORMAT,
@@ -25,17 +25,26 @@ logging.basicConfig(
     ]
 )
 
-# 设置根日志器
+# 获取根日志器
 logger = logging.getLogger()
 logger.setLevel(getattr(logging, config.LOG_LEVEL))
 
-# 确保所有模块的日志器都使用相同的配置
-for name in logging.root.manager.loggerDict:
-    logger = logging.getLogger(name)
-    logger.handlers = []
-    logger.addHandler(logging.FileHandler(log_file, encoding='utf-8', mode='a'))
-    logger.addHandler(logging.StreamHandler())
-    logger.setLevel(getattr(logging, config.LOG_LEVEL))
+# 移除所有现有的处理器
+for handler in logger.handlers[:]:
+    logger.removeHandler(handler)
+
+# 添加新的处理器
+file_handler = logging.FileHandler(log_file, encoding='utf-8', mode='a')
+stream_handler = logging.StreamHandler()
+
+# 设置格式器
+formatter = logging.Formatter(config.LOG_FORMAT)
+file_handler.setFormatter(formatter)
+stream_handler.setFormatter(formatter)
+
+# 添加处理器到根日志器
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
 
 app = Flask(__name__)
 
