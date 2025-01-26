@@ -26,13 +26,13 @@ class SubtitleProcessor:
             'skip_download': True,
             'writesubtitles': True,
             'writeautomaticsub': True,
-            'subtitlesformat': 'srt',
+            'subtitlesformat': 'vtt',
             'subtitleslangs': ['en'],
             'ignoreerrors': True,
             'no_warnings': True,
             'extract_flat': True,
             'outtmpl': str(config.SUBTITLE_DIR / '%(id)s.%(ext)s'),
-            'quiet': False,  # 临时设为False以查看更多信息
+            'quiet': True,
             'verbose': True  # 添加详细输出
         }
         # 使用同步队列替代异步队列
@@ -85,59 +85,31 @@ class SubtitleProcessor:
             with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
                 try:
                     logger.info(f"正在提取视频信息: {url}")
-                    info = ydl.extract_info(url, download=False)  # 先只提取信息
+                    info = ydl.extract_info(url, download=True)
                     video_id = info['id']
                     logger.info(f"视频ID: {video_id}")
                     
-                    # 检查是否有字幕
-                    if 'subtitles' in info and lang in info['subtitles']:
-                        logger.info(f"找到{lang}语言的字幕")
-                    elif 'automatic_captions' in info and lang in info['automatic_captions']:
-                        logger.info(f"找到{lang}语言的自动生成字幕")
-                    else:
-                        logger.error(f"视频没有{lang}语言的字幕")
-                        return {
-                            'status': 'error',
-                            'code': 'SUB_NOT_FOUND',
-                            'message': f'视频没有{lang}语言的字幕'
-                        }
-                    
-                    # 下载字幕
-                    logger.info("开始下载字幕文件")
-                    ydl.download([url])
-                    
-                    sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.srt"
-                    auto_sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.auto.srt"
-                    
-                    logger.debug(f"检查字幕文件: {sub_path} 或 {auto_sub_path}")
-                    
-                    # 检查文件是否存在
-                    if sub_path.exists():
-                        logger.info(f"找到字幕文件: {sub_path}")
-                        target_path = sub_path
-                    elif auto_sub_path.exists():
-                        logger.info(f"找到自动生成的字幕文件: {auto_sub_path}")
-                        target_path = auto_sub_path
-                    else:
-                        # 列出目录内容以便调试
-                        logger.debug("目录内容:")
-                        for f in config.SUBTITLE_DIR.glob('*'):
-                            logger.debug(f"- {f}")
+                    # 检查所有可能的字幕文件扩展名
+                    for ext in ['vtt', 'srt']:
+                        sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.{ext}"
+                        auto_sub_path = config.SUBTITLE_DIR / f"{video_id}.{lang}.auto.{ext}"
                         
-                        error_msg = f"字幕文件未找到: {sub_path} 或 {auto_sub_path}"
+                        if sub_path.exists():
+                            target_path = sub_path
+                            break
+                        elif auto_sub_path.exists():
+                            target_path = auto_sub_path
+                            break
+                    else:
                         self.update_error_stats('download_errors')
-                        logger.error(error_msg)
-                        raise FileNotFoundError(f"字幕下载失败 - {error_msg}")
-                    
-                    content = target_path.read_text(encoding='utf-8')
-                    logger.debug(f"字幕内容长度: {len(content)} 字符")
+                        raise FileNotFoundError("字幕下载失败")
                     
                     result = {
                         'status': 'success',
                         'url': url,
                         'video_id': video_id,
                         'path': str(target_path),
-                        'content': content
+                        'content': target_path.read_text(encoding='utf-8')
                     }
                     
                     logger.info(f"字幕下载成功: {url}")
