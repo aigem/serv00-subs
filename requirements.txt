@@ -1,8 +1,8 @@
 Flask==3.0.2
 Flask-Caching==2.1.0
-urllib3==1.26.18
-requests==2.31.0
+urllib3==1.26.15
+requests==2.28.2
 pycryptodomex==3.20.0
-yt-dlp
+yt-dlp==2023.7.6
 python-dotenv==1.0.1
 tenacity==8.2.3
