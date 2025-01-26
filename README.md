@@ -41,7 +41,13 @@ pip install -r requirements.txt
 4. **安装FFmpeg**
 ```bash
 # Ubuntu/Debian
-sudo apt install ffmpeg
+sudo apt update
+sudo apt install ffmpeg -y
+```
+如果不使用sudo，请使用以下命令：
+```bash
+apt update
+apt install ffmpeg -y
 ```
 
 5. **配置环境变量**

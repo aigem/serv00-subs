@@ -32,7 +32,7 @@ API_PORT=${API_PORT:-5000}
 API_HOST=${API_HOST:-"0.0.0.0"}
 
 # 检查Python版本
-python_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+python_version=$(python -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
 if (( $(echo "$python_version < 3.8" | bc -l) )); then
     echo "错误: 需要Python 3.8或更高版本"
     exit 1
